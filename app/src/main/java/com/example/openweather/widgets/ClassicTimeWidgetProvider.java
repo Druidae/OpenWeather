@@ -1,0 +1,102 @@
+package com.example.openweather.widgets;
+
+import android.app.PendingIntent;
+import android.appwidget.AppWidgetManager;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
+import android.util.Log;
+import android.widget.RemoteViews;
+
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+import com.example.openweather.AlarmReceiver;
+import com.example.openweather.R;
+import com.example.openweather.models.Weather;
+
+public class ClassicTimeWidgetProvider extends AbstractWidgetProvider {
+
+    private static final String TAG = "TimeWidgetProvider";
+
+    private static final String ACTION_UPDATE_TIME = "com.example.openweather.UPDATE_TIME";
+
+
+    @Override
+    public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
+        for (int widgetId : appWidgetIds) {
+            RemoteViews remoteViews = new RemoteViews(context.getPackageName(),
+                    R.layout.time_widget_classic);
+
+            setTheme(context, remoteViews);
+
+            Intent intent = new Intent(context, AlarmReceiver.class);
+            PendingIntent pendingIntent = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M
+                ? PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE)
+                : PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+
+            remoteViews.setOnClickPendingIntent(R.id.widgetButtonRefresh, pendingIntent);
+
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+            Weather widgetWeather = this.getTodayWeather(context);
+
+            if (widgetWeather == null) {
+                this.openMainActivity(context, remoteViews);
+                return;
+            }
+
+            DateFormat timeFormat = android.text.format.DateFormat.getTimeFormat(context);
+            String defaultDateFormat = context.getResources().getStringArray(R.array.dateFormatsValues)[0];
+            String simpleDateFormat = sp.getString("dateFormat", defaultDateFormat);
+            if ("custom".equals(simpleDateFormat)) {
+                simpleDateFormat = sp.getString("dateFormatCustom", defaultDateFormat);
+            }
+            String dateString;
+            try {
+                simpleDateFormat = simpleDateFormat.substring(0, simpleDateFormat.indexOf("-") - 1);
+                try {
+                    SimpleDateFormat resultFormat = new SimpleDateFormat(simpleDateFormat);
+                    dateString = resultFormat.format(new Date());
+                } catch (IllegalArgumentException e) {
+                    dateString = context.getResources().getString(R.string.error_dateFormat);
+                }
+            } catch (StringIndexOutOfBoundsException e) {
+                DateFormat dateFormat = DateFormat.getDateInstance(DateFormat.LONG);
+                dateString = dateFormat.format(new Date());
+            }
+
+            remoteViews.setTextViewText(R.id.time, timeFormat.format(new Date()));
+            remoteViews.setTextViewText(R.id.date, dateString);
+            remoteViews.setTextViewText(R.id.widgetCity, widgetWeather.getCity() + ", " + widgetWeather.getCountry());
+            remoteViews.setTextViewText(R.id.widgetTemperature, this.getFormattedTemperature(widgetWeather, context, sp));
+            remoteViews.setTextViewText(R.id.widgetDescription, widgetWeather.getDescription());
+            remoteViews.setImageViewBitmap(R.id.widgetIcon, getWeatherIcon(widgetWeather, context));
+
+            appWidgetManager.updateAppWidget(widgetId, remoteViews);
+        }
+        scheduleNextUpdate(context);
+    }
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        if (ACTION_UPDATE_TIME.equals(intent.getAction())) {
+            AppWidgetManager appWidgetManager = AppWidgetManager.getInstance(context);
+            ComponentName provider = new ComponentName(context.getPackageName(), getClass().getName());
+            int ids[] = appWidgetManager.getAppWidgetIds(provider);
+            onUpdate(context, appWidgetManager, ids);
+        } else {
+            super.onReceive(context, intent);
+        }
+    }
+
+    @Override
+    public void onDisabled(Context context) {
+        super.onDisabled(context);
+
+        Log.d(TAG, "Disable time widget updates");
+        cancelUpdate(context);
+    }
+}
