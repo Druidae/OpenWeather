@@ -334,7 +334,7 @@ public class MainActivity extends BaseActivity implements LocationListener {
         });
         alert.setNegativeButton(R.string.dialog_cancel, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int whichButton) {
-                // Cancelled
+                
             }
         });
         alert.show();
